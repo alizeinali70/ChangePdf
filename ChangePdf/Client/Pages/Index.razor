@@ -1,0 +1,63 @@
+﻿@page "/"
+@using System.IO
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components.Forms
+@using PdfSharpCore.Pdf
+@using PdfSharpCore.Pdf.IO
+@using PdfSharpCore.Drawing
+@inject IJSRuntime JSRuntime
+
+<h3>PDF Editor</h3>
+
+<InputFile OnChange="OnFileChange" />
+@if (pdfBytes != null)
+{
+    <button @onclick="SavePdf">Save PDF</button>
+}
+
+@if (!string.IsNullOrEmpty(pdfBase64))
+{
+    <embed src="data:application/pdf;base64,@pdfBase64" type="application/pdf" width="600" height="800" />
+}
+
+@code {
+    private byte[] pdfBytes;
+    private string pdfBase64;
+
+    private async Task OnFileChange(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        using var stream = file.OpenReadStream();
+        using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream);
+        pdfBytes = memoryStream.ToArray();
+
+        ModifyPdf(pdfBytes);
+    }
+
+    private void ModifyPdf(byte[] fileBytes)
+    {
+        using var inputDocument = PdfReader.Open(new MemoryStream(fileBytes), PdfDocumentOpenMode.Modify);
+        var page = inputDocument.Pages[0];
+        var gfx = XGraphics.FromPdfPage(page);
+
+        // Example: Draw a string at position (100, 100) on the first page
+        var font = new XFont("Verdana", 20, XFontStyle.Bold);
+        gfx.DrawString("Hello, PDF!", font, XBrushes.Black, new XPoint(100, 100));
+
+        using var outputStream = new MemoryStream();
+        inputDocument.Save(outputStream);
+        pdfBytes = outputStream.ToArray();
+        pdfBase64 = Convert.ToBase64String(pdfBytes);
+    }
+
+    private async Task SavePdf()
+    {
+        var fileName = "ModifiedPdf.pdf";
+        var mimeType = "application/pdf";
+        var base64 = Convert.ToBase64String(pdfBytes);
+        var url = $"data:{mimeType};base64,{base64}";
+
+        await JSRuntime.InvokeVoidAsync("downloadFile", url, fileName);
+    }
+}
